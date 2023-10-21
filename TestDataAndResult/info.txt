@@ -1,1 +1,2 @@
-# Add your test run input data file to this repository.
+# Add your test run input data file to this directory.
+# Output file will be stored into this directory.
