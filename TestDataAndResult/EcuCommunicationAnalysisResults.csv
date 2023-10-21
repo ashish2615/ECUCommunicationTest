@@ -1,0 +1,6 @@
+MessageName,SequenceNumber,Timestamp,DroppedPackets,Comment
+WheelTickMsg,64,22530,6,Message have 6 packets missing between 64 and 70 sequence
+WheelTickMsg,187,24990,8,Message have 2 packets missing between 187 and 189 sequence
+WheelTickMsg,33,37270,10,Message have 2 packets missing between 33 and 35 sequence
+WheelTickMsg,39,37390,12,Message have 2 packets missing between 39 and 41 sequence
+WheelTickMsg,106,48970,14,Message have 2 packets missing between 106 and 108 sequence
