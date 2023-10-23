@@ -9,6 +9,6 @@ This repository contains the coding challenge solution for observing the behavio
     * `Comment`: Test run comment for number of packets dropped.
 * Package `OutputHelper` is used to create an output file with given list of headers. 
   * List of defined headers is `["MessageName", "SequenceNumber", "Timestamp", "DroppedPackets", "Comment"]`
-* Package JsonParser is used to read the input Json file and access the Json data object which is then used to access the data for the analysis.
+* Package `JsonParser` is used to read the input Json file and access the Json data object which is then used to access the data for the analysis.
 * Package `ECUCommunication` contains the implementation for observing the communication and dropped (or missing) packets during the ECU communication.
 * The code can be executed by running the `run_test.py` script in `TestRunner` package.
