@@ -101,6 +101,7 @@ class EcuCommunication:
 
         # if Sequence has started with max value i.e. 255 set/reset previous sequence counter to -1.
         # -1 is set to meet the condition that consecutive message sequences have a difference of 1.
+        self.vehicle_start_flag = True
         if self.previous_sequence_counter == self.max_sequence_value:
             self.previous_sequence_counter = -1
             if message_sequence_number != self.first_message_sequence_value:
