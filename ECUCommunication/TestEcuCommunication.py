@@ -35,9 +35,11 @@ class EcuCommunication:
         self.previous_sequence_counter = None
         self.message_sequence_cyclic_time = 20
         self.max_sequence_value = 255
+        self.first_message_sequence_value = 0
         self.value_not_exist = -1
         self.number_of_packet_dropped = 0
         self.empty_string_value = ""
+        self.vehicle_start_flag = False
 
         self.csv_output_data_file = CsvOutputWriter(relative_path_for_input_output_directory, output_data_file_name,
                                                     headers)
@@ -61,26 +63,17 @@ class EcuCommunication:
         If there are missing packets log the information into output file.
         :param sequence: Sequence data for a given message.
         """
-        # Check if any of the key in message sequence is missing i.e. (data, message_sequence_timestamp)
-        if any(key not in sequence.keys() for key in self.expected_sequence_data_keys):
-            missing_keys = tuple(set(self.expected_sequence_data_keys) - set(sequence))
-            test_result = [self.message_name, self.empty_string_value, self.empty_string_value,
-                           self.empty_string_value, f"Message sequence has missing key: {missing_keys}"]
-            self.csv_output_data_file.append_data_to_csv_output(test_result)
-            return str(KeyError)
-
+        # Get message sequence data.
         message_sequence_number = self.get_message_sequence_counter(sequence)
         message_sequence_timestamp = self.get_message_sequence_timestamp(sequence)
 
-        # Check if either of message sequence number or message sequence timestamp does value not exist.
+        # Check if either of message sequence number or message sequence timestamp key/value does not exist.
         if message_sequence_number == self.value_not_exist or message_sequence_number is None:
-            self.number_of_packet_dropped += 1
             self.add_test_results_to_csv(self.message_name, "", str(message_sequence_timestamp),
                                          self.number_of_packet_dropped,
                                          "Message has missing sequence number")
             return
         elif message_sequence_timestamp == self.value_not_exist or message_sequence_timestamp is None:
-            self.number_of_packet_dropped += 1
             self.add_test_results_to_csv(self.message_name, str(message_sequence_number), "",
                                          self.number_of_packet_dropped,
                                          "Message sequence has missing timestamp")
@@ -92,11 +85,40 @@ class EcuCommunication:
             self.previous_sequence_counter = message_sequence_number
             return
 
+        # The message counter on vehicle start should start with 0 which would be the very first message between ECUs.
+        # Check if the very first sequence is 0 or not.
+        if self.previous_sequence_counter != self.first_message_sequence_value and self.vehicle_start_flag is False:
+            # Get number of missing message packets from start till the very first message observed.
+            missing_sequence_numbers = self.get_missing_message_packet_numbers(self.previous_sequence_counter,
+                                                                               self.first_message_sequence_value)
+            self.number_of_packet_dropped += missing_sequence_numbers
+            self.add_test_results_to_csv(self.message_name, str(self.previous_sequence_counter),
+                                         str(self.previous_sequence_timestamp),
+                                         self.number_of_packet_dropped,
+                                         f"{self.number_of_packet_dropped} "
+                                         f"Message packets are missing after vehicle start.")
+            self.vehicle_start_flag = True
+
         # if Sequence has started with max value i.e. 255 set/reset previous sequence counter to -1.
         # -1 is set to meet the condition that consecutive message sequences have a difference of 1.
         if self.previous_sequence_counter == self.max_sequence_value:
             self.previous_sequence_counter = -1
+            if message_sequence_number != self.first_message_sequence_value:
+                self.vehicle_start_flag = False  # Reset flag to False as sequence should start from zero.
 
+        self.check_for_consecutive_message_sequence(message_sequence_number, message_sequence_timestamp)
+
+        self.previous_sequence_counter = message_sequence_number
+        self.previous_sequence_timestamp = message_sequence_timestamp
+
+    def check_for_consecutive_message_sequence(self, message_sequence_number, message_sequence_timestamp):
+        """
+        This method checks if the message send from one ECU to second ECU are consecutive or not. If messages are
+        consecutive then calculate the time difference between them and cross-check the time difference with
+        expected cyclic time for message sequence.
+        :param message_sequence_number: Observed message sequence number.
+        :param message_sequence_timestamp: Observed message sequence timestamp.
+        """
         # Check if current sequence is consecutive to previous sequence
         if message_sequence_number - self.previous_sequence_counter == 1:
             # Calculate the time difference between two consecutive message sequences.
@@ -109,16 +131,15 @@ class EcuCommunication:
                                              f"Message sequences are not cyclic. time difference is greater than"
                                              f" {self.message_sequence_cyclic_time}")
         else:
-            missing_sequence_numbers = message_sequence_number - self.previous_sequence_counter
+            # Get number of missing message packets
+            missing_sequence_numbers = self.get_missing_message_packet_numbers(message_sequence_number,
+                                                                               self.previous_sequence_counter)
             self.number_of_packet_dropped += missing_sequence_numbers
             self.add_test_results_to_csv(self.message_name, self.previous_sequence_counter,
                                          self.previous_sequence_timestamp,
                                          self.number_of_packet_dropped,
                                          f"Message have {missing_sequence_numbers} packets missing between"
                                          f" {self.previous_sequence_counter} and {message_sequence_number} sequence")
-
-        self.previous_sequence_counter = message_sequence_number
-        self.previous_sequence_timestamp = message_sequence_timestamp
 
     def get_message_name_and_data(self) -> tuple:
         """
@@ -148,6 +169,16 @@ class EcuCommunication:
         if self.timestamp_key in sequence:
             return sequence[self.timestamp_key]
         return self.value_not_exist
+
+    @staticmethod
+    def get_missing_message_packet_numbers(current_message_sequence: int, previous_message_sequence: int) -> int:
+        """
+        This method calculates the number of missing message packets between two message sequences.
+        :param current_message_sequence: Current message sequence number.
+        :param previous_message_sequence: Previous message sequence number.
+        :return: Number of missing message packets.
+        """
+        return current_message_sequence - previous_message_sequence
 
     @staticmethod
     def get_list_of_sequences(message_sequence_data: dict) -> list:
