@@ -10,6 +10,7 @@ vcs.xml
 */profiles_settings.xml
 
 /TestDataAndResult/sample.json.txt
+/TestDataAndResult/test.json
 /TestDataAndResult/EcuCommunicationAnalysisResults.csv
 /.idea/workspace.xml
 /.idea/inspectionProfiles/profiles_settings.xml
