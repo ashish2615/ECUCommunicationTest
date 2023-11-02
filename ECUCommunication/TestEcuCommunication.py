@@ -49,13 +49,32 @@ class EcuCommunication:
         """
         Check if ECUs are communicating and have missing packets.
         """
-        # Get message name and corresponding message data from the configs
-        self.message_name, message_data = self.get_message_name_and_data()
-        # Get the list of all sequences for the given message name.
-        list_of_sequences = self.get_list_of_sequences(message_data)
+        # Check if input Json file contains any data / just keys.
+        if not any(self.test_data.values()):
+            self.add_test_results_to_csv("", "", "",
+                                         0,
+                                         f"There is no data in the {self.input_file_path} input file.")
+            return
 
-        for sequence in list_of_sequences:
-            self.analyze_the_sequence_data(sequence)
+        # Get message name and corresponding message data from the configs.
+        for item in self.test_data.items():
+            # Reset parameters for each message evaluation (i.e. how many packets are dropped)
+            # between ECUs from vehicle start point.
+            self.reset_params_for_message_evaluation()
+
+            self.message_name, message_sequence_data = self.get_message_name_and_data(item)
+            # Get the list of all sequences for the given message name.
+            list_of_sequences = self.get_list_of_sequences(message_sequence_data)
+
+            # Check if there are no recorded message sequences in the list.
+            if not list_of_sequences:
+                self.add_test_results_to_csv("", "", "",
+                                             0,
+                                             f"There are no message sequence for message : {self.message_name}.")
+                return
+
+            for sequence in list_of_sequences:
+                self.analyze_the_sequence_data(sequence)
 
     def analyze_the_sequence_data(self, sequence: dict):
         """
@@ -142,14 +161,6 @@ class EcuCommunication:
                                          f"Message have {missing_sequence_numbers} packets missing between"
                                          f" {self.previous_sequence_counter} and {message_sequence_number} sequence")
 
-    def get_message_name_and_data(self) -> tuple:
-        """
-        Get the data for the given message.
-        :return: Message name as key and message data as value.
-        """
-        for key, value in self.test_data.items():
-            return key, value
-
     def get_message_sequence_counter(self, sequence: dict) -> int:
         """
         This method check for the sequence number of a given message sequence.
@@ -172,14 +183,16 @@ class EcuCommunication:
         return self.value_not_exist
 
     @staticmethod
-    def get_missing_message_packet_numbers(current_message_sequence: int, previous_message_sequence: int) -> int:
+    def get_message_name_and_data(message_data: tuple) -> tuple:
         """
-        This method calculates the number of missing message packets between two message sequences.
-        :param current_message_sequence: Current message sequence number.
-        :param previous_message_sequence: Previous message sequence number.
-        :return: Number of missing message packets.
+        Get the data for the given message.
+
+        :param message_data: Message sequence observation between two ECUs.
+        :return: Message name as key and message data as value.
         """
-        return current_message_sequence - previous_message_sequence
+        message_name = message_data[0]
+        message_sequence_data = message_data[1]
+        return message_name, message_sequence_data
 
     @staticmethod
     def get_list_of_sequences(message_sequence_data: dict) -> list:
@@ -190,6 +203,16 @@ class EcuCommunication:
         """
         for _, value in message_sequence_data.items():
             return value
+
+    @staticmethod
+    def get_missing_message_packet_numbers(current_message_sequence: int, previous_message_sequence: int) -> int:
+        """
+        This method calculates the number of missing message packets between two message sequences.
+        :param current_message_sequence: Current message sequence number.
+        :param previous_message_sequence: Previous message sequence number.
+        :return: Number of missing message packets.
+        """
+        return current_message_sequence - previous_message_sequence - 1
 
     def add_test_results_to_csv(self, message_name: string, sequence_number: str, sequence_timestamp: str,
                                 packet_dropped_number: int,
@@ -205,3 +228,11 @@ class EcuCommunication:
         """
         test_result = [message_name, sequence_number, sequence_timestamp, packet_dropped_number, comment]
         self.csv_output_data_file.append_data_to_csv_output(test_result)
+
+    def reset_params_for_message_evaluation(self):
+        """
+        This method resets the test specific parameters for the packets dropped for each message
+        between two ECUs.
+        """
+        (self.previous_sequence_counter, self.previous_sequence_timestamp,
+         self.number_of_packet_dropped, self.vehicle_start_flag) = None, None, 0, False
