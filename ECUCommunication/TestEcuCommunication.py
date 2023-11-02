@@ -40,6 +40,7 @@ class EcuCommunication:
         self.number_of_packet_dropped = 0
         self.empty_string_value = ""
         self.vehicle_start_flag = False
+        self.list_of_consequent_sequences = []
 
         self.csv_output_data_file = CsvOutputWriter(relative_path_for_input_output_directory, output_data_file_name,
                                                     headers)
@@ -64,16 +65,20 @@ class EcuCommunication:
 
             self.message_name, message_sequence_data = self.get_message_name_and_data(item)
             # Get the list of all sequences for the given message name.
-            list_of_sequences = self.get_list_of_sequences(message_sequence_data)
+            message_sequences = self.get_list_of_sequences(message_sequence_data)
 
             # Check if there are no recorded message sequences in the list.
-            if not list_of_sequences:
+            if not message_sequences:
                 self.add_test_results_to_csv("", "", "",
                                              0,
                                              f"There are no message sequence for message : {self.message_name}.")
                 return
 
-            for sequence in list_of_sequences:
+            # Sort the list of message sequences with respect to timestamp to get the correct
+            # observation sequence of messages in the data file.
+            self.list_of_consequent_sequences = self.get_sorted_list_of_sequences(message_sequences)
+
+            for sequence in self.list_of_consequent_sequences:
                 self.analyze_the_sequence_data(sequence)
 
     def analyze_the_sequence_data(self, sequence: dict):
@@ -140,7 +145,7 @@ class EcuCommunication:
         :param message_sequence_timestamp: Observed message sequence timestamp.
         """
         # Check if current sequence is consecutive to previous sequence
-        if message_sequence_number - self.previous_sequence_counter == 1:
+        if message_sequence_number == self.previous_sequence_counter + 1:
             # Calculate the time difference between two consecutive message sequences.
             consecutive_sequence_time_difference = message_sequence_timestamp - self.previous_sequence_timestamp
             if consecutive_sequence_time_difference != 20:
@@ -155,11 +160,12 @@ class EcuCommunication:
             missing_sequence_numbers = self.get_missing_message_packet_numbers(message_sequence_number,
                                                                                self.previous_sequence_counter)
             self.number_of_packet_dropped += missing_sequence_numbers
-            self.add_test_results_to_csv(self.message_name, self.previous_sequence_counter,
-                                         self.previous_sequence_timestamp,
-                                         self.number_of_packet_dropped,
-                                         f"Message have {missing_sequence_numbers} packets missing between"
-                                         f" {self.previous_sequence_counter} and {message_sequence_number} sequence")
+            if missing_sequence_numbers != 0:
+                self.add_test_results_to_csv(self.message_name, self.previous_sequence_counter,
+                                             self.previous_sequence_timestamp,
+                                             self.number_of_packet_dropped,
+                                             f"Message have {missing_sequence_numbers} packets missing between"
+                                             f" {self.previous_sequence_counter} and {message_sequence_number} sequence")
 
     def get_message_sequence_counter(self, sequence: dict) -> int:
         """
@@ -181,6 +187,14 @@ class EcuCommunication:
         if self.timestamp_key in sequence:
             return sequence[self.timestamp_key]
         return self.value_not_exist
+
+    def get_sorted_list_of_sequences(self, sublist_of_sequences: list) -> list:
+        """
+        This method sort the list of observed message sequences in the ascending order.
+        :param sublist_of_sequences: List of sequences observed for a given  message.
+        :return: Sorted list of observed sequences.
+        """
+        return sorted(sublist_of_sequences, key=lambda x: x[self.timestamp_key])
 
     @staticmethod
     def get_message_name_and_data(message_data: tuple) -> tuple:
@@ -236,3 +250,6 @@ class EcuCommunication:
         """
         (self.previous_sequence_counter, self.previous_sequence_timestamp,
          self.number_of_packet_dropped, self.vehicle_start_flag) = None, None, 0, False
+        self.consecutive_events = []
+        self.missing_events = []
+        self.time_diff = []
